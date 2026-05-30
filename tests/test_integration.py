@@ -68,6 +68,50 @@ def test_sync_uses_existing_base_url_when_no_host_port(tmp_path, mock_server):
     assert updated["providers"][DEFAULT_PROVIDER_ID]["baseUrl"] == srv.base_url
 
 
+def test_env_host_port_used_when_no_cli_target(tmp_path, mock_server, monkeypatch):
+    cfg = tmp_path / "models.json"
+    cfg.write_text(json.dumps(SAMPLE_CONFIG), encoding="utf-8")
+    srv = mock_server(["org/env-model"])
+    monkeypatch.setenv("LLAMA_ARG_HOST", "127.0.0.1")
+    monkeypatch.setenv("LLAMA_ARG_PORT", str(srv.port))
+
+    rc = main(["--config", str(cfg)])
+
+    assert rc == 0
+    updated = load_config(cfg)
+    assert "org/env-model" in model_ids(updated)
+    assert updated["providers"][DEFAULT_PROVIDER_ID]["baseUrl"] == srv.base_url
+
+
+def test_cli_target_overrides_env_target(tmp_path, mock_server, monkeypatch):
+    cfg = tmp_path / "models.json"
+    cfg.write_text(json.dumps(SAMPLE_CONFIG), encoding="utf-8")
+    srv = mock_server(["org/cli-model"])
+    monkeypatch.setenv("LLAMA_ARG_HOST", "127.0.0.1")
+    monkeypatch.setenv("LLAMA_ARG_PORT", "1")
+
+    rc = main([
+        "--config", str(cfg),
+        "--host", "127.0.0.1", "--port", str(srv.port),
+    ])
+
+    assert rc == 0
+    updated = load_config(cfg)
+    assert "org/cli-model" in model_ids(updated)
+    assert updated["providers"][DEFAULT_PROVIDER_ID]["baseUrl"] == srv.base_url
+
+
+def test_invalid_env_port_exits_nonzero(tmp_path, monkeypatch):
+    cfg = tmp_path / "models.json"
+    cfg.write_text(json.dumps(SAMPLE_CONFIG), encoding="utf-8")
+    monkeypatch.setenv("LLAMA_ARG_PORT", "not-a-port")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--config", str(cfg)])
+
+    assert exc_info.value.code != 0
+
+
 def test_no_url_update_preserves_existing_base_url(tmp_path, mock_server):
     srv = mock_server(["org/model-a"])
     cfg = tmp_path / "models.json"

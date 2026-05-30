@@ -78,7 +78,7 @@ def parse_jsonc(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 DEFAULT_PROVIDER_ID = "llama-cpp"
-DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
+DEFAULT_BASE_URL = "http://localhost:8080/v1"
 DEFAULT_API_KEY = "llama"
 DEFAULT_API = "openai-completions"
 DEFAULT_CONTEXT_WINDOW = 32768

@@ -22,6 +22,11 @@ from .config import (
 )
 from .vllm_client import VLLMClient, VLLMClientError
 
+DEFAULT_HOST = "localhost"
+DEFAULT_PORT = 8080
+LLAMA_HOST_ENV = "LLAMA_ARG_HOST"
+LLAMA_PORT_ENV = "LLAMA_ARG_PORT"
+
 _WRAPPER_TEMPLATE = """\
 #!/bin/sh
 # Written by: pi-sync install
@@ -52,10 +57,12 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="pi-sync",
         description=(
             "Sync Pi models.json with models served by a vLLM/llama.cpp server.\n\n"
-            "Default (no --host/--port): reads baseUrl from the existing config and\n"
-            "queries that server without changing the URL in the config.\n\n"
-            "With --host or --port: queries the specified target and also updates\n"
-            "the provider's baseUrl in the config (use --no-url-update to suppress)."
+            "Default (no --host/--port/LLAMA_ARG_HOST/LLAMA_ARG_PORT): reads\n"
+            "baseUrl from the existing config and queries that server without\n"
+            "changing the URL in the config.\n\n"
+            "With CLI or llama.cpp env host/port: queries the specified target\n"
+            "and updates the provider's baseUrl in the config "
+            "(use --no-url-update to suppress)."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -102,14 +109,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--host",
         default=None,
         metavar="HOST",
-        help="vLLM/llama-server hostname (default: read from config, else 127.0.0.1)",
+        help="vLLM/llama-server hostname (default: env, config, else localhost)",
     )
     p.add_argument(
         "--port",
         type=int,
         default=None,
         metavar="PORT",
-        help="vLLM/llama-server port (default: read from config, else 8080)",
+        help="vLLM/llama-server port (default: env, config, else 8080)",
     )
     p.add_argument(
         "--provider",
@@ -133,7 +140,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--no-url-update",
         action="store_true",
-        help="Don't update baseUrl in the provider config even when --host/--port is given",
+        help="Don't update baseUrl in the provider config even when CLI or env host/port is given",
     )
     p.add_argument(
         "--no-model-update",
@@ -213,6 +220,21 @@ def _resolve_config_path(explicit: Optional[Path]) -> Path:
     return detected  # type: ignore[return-value]
 
 
+def _env_value(name: str) -> Optional[str]:
+    value = os.environ.get(name)
+    return value if value else None
+
+
+def _env_port() -> Optional[int]:
+    value = _env_value(LLAMA_PORT_ENV)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        _die(f"{LLAMA_PORT_ENV} must be an integer, got {value!r}.")
+
+
 def _die(msg: str, code: int = 1) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(code)
@@ -226,7 +248,20 @@ def main(argv=None) -> int:
         return _cmd_install(args)
 
     config_path = _resolve_config_path(args.config)
-    user_specified_target = args.host is not None or args.port is not None
+    env_host = _env_value(LLAMA_HOST_ENV)
+    env_port = _env_port()
+    target_specified = (
+        args.host is not None
+        or args.port is not None
+        or env_host is not None
+        or env_port is not None
+    )
+    target_host = args.host or env_host or DEFAULT_HOST
+    target_port = (
+        args.port
+        if args.port is not None
+        else (env_port if env_port is not None else DEFAULT_PORT)
+    )
     config_was_missing = not config_path.exists()
 
     # ------------------------------------------------------------------ #
@@ -255,10 +290,8 @@ def main(argv=None) -> int:
             provider_id = DEFAULT_PROVIDER_ID
         else:
             # Try to match by URL when we already know the target
-            if user_specified_target:
-                host = args.host or "127.0.0.1"
-                port = args.port or 8080
-                candidate_url = f"http://{host}:{port}/v1"
+            if target_specified:
+                candidate_url = f"http://{target_host}:{target_port}/v1"
                 provider_id = find_provider_by_url(config, candidate_url)
             if provider_id is None:
                 _die(
@@ -275,10 +308,8 @@ def main(argv=None) -> int:
         .get("baseUrl", "")
     )
 
-    if user_specified_target:
-        host = args.host or "127.0.0.1"
-        port = args.port or 8080
-        query_base_url = f"http://{host}:{port}/v1"
+    if target_specified:
+        query_base_url = f"http://{target_host}:{target_port}/v1"
         new_config_base_url = None if args.no_url_update else query_base_url
     else:
         query_base_url = existing_base_url or DEFAULT_BASE_URL

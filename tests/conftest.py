@@ -10,6 +10,12 @@ from typing import List
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clear_llama_target_env(monkeypatch):
+    monkeypatch.delenv("LLAMA_ARG_HOST", raising=False)
+    monkeypatch.delenv("LLAMA_ARG_PORT", raising=False)
+
+
 class _MockVLLMHandler(BaseHTTPRequestHandler):
     models: List[str] = []
     fail_with: int = 0
