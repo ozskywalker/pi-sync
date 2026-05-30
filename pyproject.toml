@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pi-sync"
+name = "pi-codingagent-sync"
 version = "0.1.0"
 description = "Sync Pi coding agent models.json with models served by a vLLM/llama.cpp server"
 readme = "README.md"

@@ -7,6 +7,12 @@ Keep Pi coding agent's `models.json` in sync with your local vLLM or llama.cpp `
 ## Install
 
 ```bash
+pip install pi-codingagent-sync
+```
+
+For local development:
+
+```bash
 pip install -e .
 ```
 
